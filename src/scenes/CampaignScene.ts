@@ -295,18 +295,12 @@ export class CampaignScene extends Phaser.Scene {
     const { width, height } = this.scale;
     const d = this.campaign.data;
     const k = this.k, m = L.margin * k;
-    const canHire = this.campaign.canHire();
     const items: MenuListItem[] = [
       { label: 'Отряды', run: () => fadeToScene(this, 'Upgrade') },
       {
         label: 'Отдохнуть',
         sub: 'пропустить ход · шторм наступит',
         run: () => { this.campaign.rest(); this.scene.restart(); },
-      },
-      {
-        label: 'Нанять отряд',
-        sub: canHire ? `${ECONOMY.hireCost} монет` : d.squads.length >= ECONOMY.maxRoster ? 'отрядов максимум' : `нужно ${ECONOMY.hireCost} монет`,
-        run: () => { if (this.campaign.hire()) this.scene.restart(); },
       },
       { label: 'Главное меню', run: () => fadeToScene(this, 'Menu') },
     ];

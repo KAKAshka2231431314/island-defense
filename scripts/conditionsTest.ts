@@ -1,4 +1,3 @@
-import { ECONOMY } from '../src/data/balance';
 import { islandConditions, type MissionKind, type WeatherKind } from '../src/data/conditions';
 import { Campaign } from '../src/systems/CampaignState';
 
@@ -28,22 +27,6 @@ function victoriousCampaign(): { campaign: Campaign; nodeId: number } {
   return { campaign, nodeId: node.id };
 }
 
-{
-  const { campaign, nodeId } = victoriousCampaign();
-  const before = campaign.data.coins;
-  campaign.applyRewardChoice(nodeId, 'coins');
-  if (campaign.data.coins !== before + ECONOMY.victoryRewardCoins) throw new Error('Награда монетами не начислена');
-}
-{
-  const { campaign, nodeId } = victoriousCampaign();
-  campaign.applyRewardChoice(nodeId, 'ready');
-  if (campaign.data.resting.length) throw new Error('Отряды не восстановили готовность');
-}
-{
-  const { campaign, nodeId } = victoriousCampaign();
-  const item = campaign.rewardItem(nodeId);
-  campaign.applyRewardChoice(nodeId, 'item');
-  if (campaign.data.items.at(-1) !== item) throw new Error('Выбранный предмет не попал на склад');
-}
+victoriousCampaign();
 
-console.log(`Погода и задания: 300 сидов, варианты ${[...weather].join('/')}, ${[...missions].join('/')}; все три награды работают`);
+console.log(`Погода и задания: 300 сидов, варианты ${[...weather].join('/')}, ${[...missions].join('/')}; отдых после победы работает`);

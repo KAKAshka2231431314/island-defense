@@ -68,19 +68,24 @@ export class UpgradeScene extends Phaser.Scene {
     const cols = Math.max(1, Math.floor((width - 12) / 372));
     const gap = 12;
     const rows = Math.ceil(c.data.squads.length / cols);
-    const willScroll = introY + 42 + rows * (CARD_H + gap) + 20 > height;
+    const willScroll = introY + 96 + rows * (CARD_H + gap) + 20 > height;
     label(this, width / 2, introY, `Выбирай тактику отряда и готовь его к следующему острову${willScroll ? '\nКолесо — список' : ''}`, 14, COLOR.light)
       .setOrigin(0.5, 0).setWordWrapWidth(width - 32).setAlign('center');
+    const hireY = introY + (willScroll ? 44 : 28);
+    const hireText = c.data.squads.length >= ECONOMY.maxRoster ? 'Отрядов максимум'
+      : c.canHire() ? `Нанять — ${ECONOMY.hireCost} монет` : `Нужно ${ECONOMY.hireCost} монет`;
+    makeButton(this, Math.max(12, width - 206), hireY, 190, 40, hireText, () => { if (c.hire()) this.scene.restart(); }, 13)
+      .setEnabled(c.canHire());
     const cardW = Math.min(400, (width - 24 - (cols - 1) * gap) / cols);
     const gridW = cols * cardW + (cols - 1) * gap;
     const startX = (width - gridW) / 2;
-    const startY = introY + (willScroll ? 62 : 42);
+    const startY = hireY + 52;
     c.data.squads.forEach((sq, i) => {
       const x = startX + (i % cols) * (cardW + gap);
       const y = startY + Math.floor(i / cols) * (CARD_H + gap);
       this.drawCard(sq, x, y, cardW);
     });
-    if (!c.data.squads.length) label(this, 30, startY, 'Нет отрядов. Найми отряд на карте кампании.', 16);
+    if (!c.data.squads.length) label(this, 30, startY, 'Нет отрядов. Нанять новый можно кнопкой выше.', 16);
     const contentH = Math.max(height, startY + rows * (CARD_H + gap) + 20);
     if (contentH > height) {
       this.cameras.main.setBounds(0, 0, width, contentH);

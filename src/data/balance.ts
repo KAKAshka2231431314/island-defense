@@ -371,8 +371,6 @@ export const ECONOMY = {
   maxRoster: 6,
   /** отрядов в одном бою */
   maxSquadsInBattle: 3,
-  /** вариант награды после победы */
-  victoryRewardCoins: 6,
 } as const;
 
 // ======================================================================

@@ -1,7 +1,6 @@
 import Phaser from 'phaser';
-import { ECONOMY } from '../data/balance';
 import { CLASS_NAMES } from '../data/units';
-import { Campaign, ITEM_NAMES } from '../systems/CampaignState';
+import { Campaign } from '../systems/CampaignState';
 import { sfx } from '../systems/Sound';
 import type { BattleResult } from './BattleScene';
 import { COLOR, fadeToScene, label, MenuList, plate, ribbonTitle, slice9, uiScale, type MenuListItem } from './ui';
@@ -122,20 +121,9 @@ export class ResultsScene extends Phaser.Scene {
       }
     }
 
-    // дальше или выбор дополнительной награды за победу
+    // дальше после итогов
     const items: MenuListItem[] = [];
-    const chooseReward = !!(campaign && r?.won && outcome === 'playing' && inCampaign);
-    if (chooseReward) {
-      const choose = (choice: 'coins' | 'ready' | 'item') => {
-        if (this.list) this.list.enabled = false;
-        campaign!.applyRewardChoice(nodeId!, choice);
-        sfx.play('click', 0.8);
-        fadeToScene(this, 'Campaign');
-      };
-      items.push({ label: `+${ECONOMY.victoryRewardCoins} монет`, sub: 'для улучшений и найма', run: () => choose('coins') });
-      items.push({ label: 'Отряды готовы', sub: 'участники боя не будут отдыхать', run: () => choose('ready') });
-      items.push({ label: `Предмет: ${ITEM_NAMES[campaign!.rewardItem(nodeId!)]}`, sub: 'добавить на склад', run: () => choose('item') });
-    } else if (campaign && outcome === 'playing' && inCampaign) {
+    if (campaign && outcome === 'playing' && inCampaign) {
       items.push({ label: 'Дальше', run: () => fadeToScene(this, 'Campaign') });
       items.push({ label: 'Отряды', run: () => fadeToScene(this, 'Upgrade') });
       items.push({ label: 'Главное меню', run: () => fadeToScene(this, 'Menu') });
@@ -154,12 +142,11 @@ export class ResultsScene extends Phaser.Scene {
       items.push({ label: 'Ещё бой', run: () => fadeToScene(this, 'Battle', { returnTo: 'Results', difficulty: 1 }) });
       items.push({ label: 'Главное меню', run: () => fadeToScene(this, 'Menu') });
     }
-    const opts = { k, size: chooseReward ? 22 : 26, gap: chooseReward ? 48 : 40, subSize: 13 };
+    const opts = { k, size: 26, gap: 40, subSize: 13 };
     const listY = Math.min(height - MenuList.height(items, opts) - 30 * k, y + h + 40 * k);
     const backing = this.add.graphics();
-    const listW = Math.round((chooseReward ? 320 : 260) * k);
+    const listW = Math.round(260 * k);
     plate(backing, x, listY - 26 * k, listW, MenuList.height(items, opts) + 52 * k, 0.45);
-    if (chooseReward) label(this, x + 22 * k, listY - 18 * k, 'Выберите награду:', 14 * k, COLOR.light, false);
     this.list = new MenuList(this, x + Math.round(36 * k), listY, items, opts);
     this.input.keyboard?.on('keydown', this.onKey, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.input.keyboard?.off('keydown', this.onKey, this));

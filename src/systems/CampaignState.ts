@@ -257,29 +257,6 @@ export class Campaign {
     return notes;
   }
 
-  rewardItem(nodeId: number): ItemId {
-    const items: ItemId[] = ['bomb', 'horn', 'shield'];
-    return items[Math.floor(mulberry32(this.node(nodeId).seed ^ 0xbb67ae85)() * items.length)];
-  }
-
-  applyRewardChoice(nodeId: number, choice: 'coins' | 'ready' | 'item'): string {
-    const d = this.data;
-    let note: string;
-    if (choice === 'coins') {
-      d.coins += ECONOMY.victoryRewardCoins;
-      d.stats.coinsEarned += ECONOMY.victoryRewardCoins;
-      note = `Дополнительные монеты: +${ECONOMY.victoryRewardCoins}`;
-    } else if (choice === 'ready') {
-      d.resting = [];
-      note = 'Отряды готовы к следующему бою';
-    } else {
-      const item = this.rewardItem(nodeId);
-      d.items.push(item);
-      note = `Получен предмет: ${ITEM_NAMES[item]}`;
-    }
-    this.save();
-    return note;
-  }
 }
 
 export const ITEM_NAMES: Record<ItemId, string> = { bomb: 'Бомба', horn: 'Рог', shield: 'Щит' };
