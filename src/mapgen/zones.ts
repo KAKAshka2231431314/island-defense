@@ -69,7 +69,7 @@ export function packSquares(grid: IslandGrid): Square[] {
   return out;
 }
 
-/** Зоны из квадратов и отдельные зоны для двух клеток каждой боковой лестницы. */
+/** Зоны из квадратов; клик по боковой лестнице ведёт в квадрат у её подножия. */
 export function zonesFromSquares(grid: IslandGrid, squares: Square[]): ZoneMap {
   const zoneOfCell = new Int32Array(grid.w * grid.h).fill(-1);
   const zones: Zone[] = squares.map((q, id) => {
@@ -83,14 +83,20 @@ export function zonesFromSquares(grid: IslandGrid, squares: Square[]): ZoneMap {
   });
   for (const s of grid.stairs) {
     if (s.side !== 'left' && s.side !== 'right') continue;
-    const id = zones.length;
-    const cells = IslandGrid.stairCellsOf(s).map(([x, y]) => grid.idx(x, y));
-    for (const c of cells) zoneOfCell[c] = id;
-    zones.push({
-      id, zx: s.x / 2, zy: s.y, cells, level: s.level,
-      cx: (s.x + 0.5) * TILE, cy: (s.y + 1) * TILE,
-      x0: s.x * TILE, y0: s.y * TILE, x1: (s.x + 1) * TILE, y1: (s.y + 2) * TILE,
-    });
+    const stairCells = IslandGrid.stairCellsOf(s);
+    const [bx, by] = stairCells[stairCells.length - 1];
+    let best = -1, bestD = Infinity;
+    for (const z of zones) {
+      if (z.level !== s.level - 1) continue;
+      for (const c of z.cells) {
+        const cx = c % grid.w, cy = Math.floor(c / grid.w);
+        if (!grid.canStep(bx, by, cx, cy)) continue;
+        const d = Math.hypot(cx - bx, cy - by);
+        if (d < bestD) { bestD = d; best = z.id; }
+      }
+    }
+    if (best < 0) continue;
+    for (const [x, y] of stairCells) zoneOfCell[grid.idx(x, y)] = best;
   }
   return { zones, zoneOfCell, size: 2 };
 }

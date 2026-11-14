@@ -60,7 +60,12 @@ for (let seed = 1; seed <= n; seed++) {
     for (const st of d.grid.stairs) {
       if (st.side !== 'left' && st.side !== 'right') continue;
       for (const [x, y] of IslandGrid.stairCellsOf(st)) {
-        if (zoneMap.zoneOfCell[d.grid.idx(x, y)] < 0) throw new Error(`Боковая лестница без зоны отряда: сид ${seed}, клетка ${x},${y}`);
+        const zoneId = zoneMap.zoneOfCell[d.grid.idx(x, y)];
+        if (zoneId < 0) throw new Error(`Боковая лестница без зоны отряда: сид ${seed}, клетка ${x},${y}`);
+        const zone = zoneMap.zones[zoneId];
+        if (zone.level !== st.level - 1 || zone.cells.some((c) => d.grid.stairAt(c % d.grid.w, Math.floor(c / d.grid.w)))) {
+          throw new Error(`Клик по боковой лестнице не ведёт в квадрат под ней: сид ${seed}, клетка ${x},${y}`);
+        }
       }
     }
     for (const side of ['left', 'front', 'right'] as const) {

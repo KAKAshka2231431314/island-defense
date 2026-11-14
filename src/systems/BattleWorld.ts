@@ -101,29 +101,42 @@ export class BattleWorld {
     return { x: ((i % this.grid.w) + 0.5) * TILE, y: (Math.floor(i / this.grid.w) + 0.5) * TILE };
   }
 
-  /** Можно ли пешком перейти из точки a в соседнюю точку b. */
-  canStepPx(ax: number, ay: number, bx: number, by: number): boolean {
+  /** Можно ли пешком перейти из точки a в соседнюю точку b, не задевая дома и деревья телом. */
+  canStepPx(ax: number, ay: number, bx: number, by: number, radius = 0): boolean {
     const g = this.grid;
     const acx = Math.floor(ax / TILE), acy = Math.floor(ay / TILE);
     const bcx = Math.floor(bx / TILE), bcy = Math.floor(by / TILE);
-    if (acx === bcx && acy === bcy) return true;
+    if (acx === bcx && acy === bcy && !this.overlapsBlocked(bx, by, radius)) return true;
     if (!g.isWalkable(bcx, bcy)) return false;
     if (!g.isWalkable(acx, acy)) return true; // выбраться из «плохой» клетки можно всегда
+    if (this.overlapsBlocked(bx, by, radius)) return false;
     if (Math.abs(acx - bcx) > 1 || Math.abs(acy - bcy) > 1) return false;
     return g.canStep(acx, acy, bcx, bcy);
   }
 
-  /** Прямая проходимость по отрезку (без обходов). */
-  clearLine(ax: number, ay: number, bx: number, by: number): boolean {
+  /** Тело радиуса radius не должно пересекать заблокированную клетку (дом, дерево, камень). */
+  private overlapsBlocked(x: number, y: number, radius: number): boolean {
+    if (radius <= 0) return false;
+    const g = this.grid;
+    const x0 = Math.floor((x - radius) / TILE), x1 = Math.floor((x + radius) / TILE);
+    const y0 = Math.floor((y - radius) / TILE), y1 = Math.floor((y + radius) / TILE);
+    for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) if (g.isBlocked(cx, cy)) return true;
+    return false;
+  }
+
+  /** Прямая проходимость по отрезку (без обходов), с запасом на радиус бойца. */
+  clearLine(ax: number, ay: number, bx: number, by: number, radius = 0): boolean {
     const g = this.grid;
     const steps = Math.ceil(Math.hypot(bx - ax, by - ay) / 16);
     let pcx = Math.floor(ax / TILE), pcy = Math.floor(ay / TILE);
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      const cx = Math.floor((ax + (bx - ax) * t) / TILE), cy = Math.floor((ay + (by - ay) * t) / TILE);
+      const px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+      const cx = Math.floor(px / TILE), cy = Math.floor(py / TILE);
       if (cx === pcx && cy === pcy) continue;
       if (!g.isWalkable(cx, cy)) return false;
       if (g.isWalkable(pcx, pcy) && !g.canStep(pcx, pcy, cx, cy)) return false;
+      if (this.overlapsBlocked(px, py, radius * 0.5)) return false;
       const side = g.stairAt(cx, cy)?.def.side;
       if (side === 'left' || side === 'right') return false;
       pcx = cx;
@@ -166,10 +179,11 @@ export class BattleWorld {
       u.navGoal = null;
       return;
     }
+    const radius = bodyRadius(u.type) * 0.75;
     u.losLeft -= dt;
     if (u.losLeft <= 0) {
       u.losLeft = MOVE.losRecheck;
-      u.losDirect = this.clearLine(u.x, u.y, goal.x, goal.y);
+      u.losDirect = this.clearLine(u.x, u.y, goal.x, goal.y, radius);
     }
     let wx = goal.x, wy = goal.y;
     const fromCell = this.cellIdx(u.x, u.y);
@@ -203,9 +217,10 @@ export class BattleWorld {
 
   tryMove(u: Unit, dx: number, dy: number): boolean {
     const nx = u.x + dx, ny = u.y + dy;
-    if (this.canStepPx(u.x, u.y, nx, ny)) { u.x = nx; u.y = ny; return true; }
-    if (dx && this.canStepPx(u.x, u.y, nx, u.y)) { u.x = nx; return true; }
-    if (dy && this.canStepPx(u.x, u.y, u.x, ny)) { u.y = ny; return true; }
+    const radius = bodyRadius(u.type) * 0.75;
+    if (this.canStepPx(u.x, u.y, nx, ny, radius)) { u.x = nx; u.y = ny; return true; }
+    if (dx && this.canStepPx(u.x, u.y, nx, u.y, radius)) { u.x = nx; return true; }
+    if (dy && this.canStepPx(u.x, u.y, u.x, ny, radius)) { u.y = ny; return true; }
     return false;
   }
 
@@ -516,19 +531,23 @@ export class BattleWorld {
     return o && !o.lost ? o : null;
   }
 
-  /** Зона для приказа: под точкой, если свободна и достижима; иначе ближайшая к точке свободная достижимая. */
+  /** Зона для приказа: под точкой; иначе ближайшая по реальному маршруту, а не просто по прямой на экране. */
   pickZone(x: number, y: number, from: Point, sq: Squad | null, allowSwap = false): Zone | null {
     const start = this.cellIdx(from.x, from.y);
+    const field = start >= 0 ? this.flow.field(start) : null;
+    const pathDist = (z: Zone) => field ? field[z.cells[0]] : Infinity;
     const ok = (z: Zone, swapping = false) => {
       const o = this.zoneOccupiedBy(z);
       if (o && o !== sq && !(swapping && sq?.zone)) return false;
-      return start < 0 || this.flow.distance(z.cells[0], start) < Infinity;
+      return start < 0 || Number.isFinite(pathDist(z));
     };
     const under = this.zoneAt(x, y);
     if (under && ok(under, allowSwap)) return under;
     let best: Zone | null = null, bestD = Infinity;
     for (const z of this.zoneMap.zones) {
-      const d = Math.hypot(z.cx - x, z.cy - y);
+      const route = pathDist(z);
+      if (!Number.isFinite(route)) continue;
+      const d = start >= 0 ? route * TILE + Math.hypot(z.cx - x, z.cy - y) * 0.2 : Math.hypot(z.cx - x, z.cy - y);
       if (d < bestD && ok(z)) { bestD = d; best = z; }
     }
     return best;

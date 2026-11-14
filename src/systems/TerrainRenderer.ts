@@ -169,6 +169,9 @@ export class TerrainRenderer {
         const stairKey = TILESET_BY_LEVEL[L - 1] ?? TILESET_BY_LEVEL[1];
         const left = s.side === 'left';
         const putStair = (frame: number, x: number, y: number, depth: number) => {
+          // за прозрачной половиной склона — вертикальная стена того же плато
+          this.objects.push(this.scene.add.image((x + 0.5) * TILE, (y + 0.5) * TILE, key, TILE_IDX.high.cliffMid)
+            .setRotation(left ? Math.PI / 2 : -Math.PI / 2).setDepth(depth - 0.5));
           this.objects.push(this.scene.add.image((x + 0.5) * TILE, (y + 0.5) * TILE, stairKey, frame).setDepth(depth));
         };
         putStair(left ? F.stairLeftTop : F.stairRightTop, s.x, s.y, plateauDepth(s.y, L));
