@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { TILE_IDX } from '../data/assetManifest';
-import { DEPTH, TILE, TILESET_BY_LEVEL } from '../data/config';
+import { CAMERA, DEPTH, TILE, TILESET_BY_LEVEL } from '../data/config';
 import type { IslandGrid } from '../mapgen/IslandGrid';
 import { type Rng } from '../mapgen/rng';
 import { fxKey } from './AnimationRegistry';
@@ -47,7 +47,7 @@ export class TerrainRenderer {
 
   render(): void {
     const { scene, grid } = this;
-    const pad = 1024;
+    const pad = CAMERA.edgePad;
     const water = scene.add.tileSprite(-pad, -pad, this.widthPx + pad * 2, this.heightPx + pad * 2, 'water_bg')
       .setOrigin(0).setDepth(DEPTH.water);
     this.objects.push(water);

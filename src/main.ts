@@ -53,6 +53,19 @@ function start(): void {
     return;
   }
   const game = createGame();
+  const fit = () => {
+    const w = Math.max(1, parent.clientWidth || window.innerWidth);
+    const h = Math.max(1, parent.clientHeight || window.innerHeight);
+    game.scale.resize(w, h);
+  };
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', fit);
+  // браузер может раскрыться уже после создания canvas — догоняем реальный размер несколькими проверками
+  for (const delay of [0, 100, 400, 1000]) setTimeout(fit, delay);
+  game.events.once(Phaser.Core.Events.DESTROY, () => {
+    window.removeEventListener('resize', fit);
+    window.removeEventListener('orientationchange', fit);
+  });
   // для отладки из консоли браузера
   if (import.meta.env.DEV) {
     (window as unknown as { game: Phaser.Game }).game = game;

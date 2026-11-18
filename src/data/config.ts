@@ -25,7 +25,7 @@ export const TILESET_BY_LEVEL: Record<number, string> = {
 export const CAMERA = {
   zoomLevels: [0.35, 0.5, 1, 2],
   panSpeed: 700, // px/с при зуме 1
-  edgePad: 512, // запас за краем мира (видно подплывающие лодки)
+  edgePad: 6144, // запас за краем мира (видно подплывающие лодки и вода покрывает широкие экраны)
 } as const;
 
 export const WATER_COLOR = 0x47aba9;
