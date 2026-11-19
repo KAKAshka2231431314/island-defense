@@ -15,6 +15,12 @@ if (frontStair.canStep(1, 1, 0, 1) || frontStair.canStep(1, 1, 2, 1)
   || !frontStair.canStep(1, 0, 1, 1) || !frontStair.canStep(1, 1, 1, 2)) {
   throw new Error('Регрессия: прямая лестница проходима сбоку или закрыта сверху/снизу');
 }
+const singleStair = IslandGrid.fromAscii(['^^^', '.S.', '...']);
+const climbRoute = new FlowFields(singleStair);
+if (climbRoute.next(singleStair.idx(1, 2), singleStair.idx(1, 0)) !== singleStair.idx(1, 1)
+  || climbRoute.next(singleStair.idx(1, 1), singleStair.idx(1, 0)) !== singleStair.idx(1, 0)) {
+  throw new Error('Регрессия: одиночная прямая лестница не ведёт на плато');
+}
 const wideStair = new IslandGrid(2, 2, new Uint8Array([2, 2, 1, 1]));
 wideStair.addStair({ x: 0, y: 1, width: 2, level: 2 });
 if (!wideStair.canStep(0, 1, 1, 1)) throw new Error('Регрессия: разделены клетки одной широкой лестницы');
