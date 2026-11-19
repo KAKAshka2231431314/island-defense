@@ -206,12 +206,16 @@ export class CampaignScene extends Phaser.Scene {
         at = this.boatAnchor(current, dir);
       }
     }
-    const boat = this.add.sprite(at.x, at.y, 'boat').setScale(0.16 * k).setDepth(20).setFlipX(dir.x < 0);
+    const boat = this.add.sprite(0, 0, 'boat').setScale(0.22 * k).setFlipX(dir.x < 0);
     boat.play(fxKey('boat'));
-    const bob = () => this.tweens.add({ targets: boat, y: boat.y - 4 * k, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const flag = this.add.graphics();
+    flag.fillStyle(0x3d2718, 1).fillRect(-2 * k, -34 * k, 3 * k, 30 * k);
+    flag.fillStyle(0x3d7bd6, 1).fillTriangle(1 * k, -34 * k, 1 * k, -20 * k, 20 * k, -27 * k);
+    const root = this.add.container(at.x, at.y, [boat, flag]).setDepth(20);
+    const bob = () => this.tweens.add({ targets: root, y: root.y - 4 * k, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     if (to) {
       sfx.play('splash', 0.35);
-      this.tweens.add({ targets: boat, x: to.x, y: to.y, duration: 1100, ease: 'Sine.easeInOut', onComplete: bob });
+      this.tweens.add({ targets: root, x: to.x, y: to.y, duration: 1100, ease: 'Sine.easeInOut', onComplete: bob });
     } else {
       bob();
     }
