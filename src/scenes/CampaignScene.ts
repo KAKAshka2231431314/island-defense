@@ -6,6 +6,7 @@ import type { SquadDef } from '../entities/Squad';
 import type { IslandNode } from '../mapgen/campaignMap';
 import { generateIsland, type IslandData } from '../mapgen/IslandGenerator';
 import { Campaign, ITEM_NAMES } from '../systems/CampaignState';
+import { fxKey } from '../systems/AnimationRegistry';
 import { sfx } from '../systems/Sound';
 import { itemTexture } from './BattleHudScene';
 import { COLOR, fadeToScene, label, MenuList, navKey, paper, PaperList, plate, restartOnResize, ribbonTitle, Tooltip, uiScale, type MenuListItem, type PaperItem } from './ui';
@@ -40,6 +41,7 @@ export class CampaignScene extends Phaser.Scene {
   private prepList: PaperList | null = null;
   private list: MenuList | null = null;
   private mapRect = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly nodeDims = new Map<number, { w: number; h: number }>();
   private tip!: Tooltip;
   private vignetteKey = '';
 
@@ -58,6 +60,7 @@ export class CampaignScene extends Phaser.Scene {
     this.modal = null;
     this.prepList = null;
     this.list = null;
+    this.nodeDims.clear();
     if (c.data.outcome !== 'playing') {
       this.scene.start('Results', { final: true });
       return;
@@ -168,11 +171,50 @@ export class CampaignScene extends Phaser.Scene {
       label(this, Math.max(70 * k, stormX - 70 * k), this.mapRect.y - 10 * k, 'Шторм', 18 * k, '#c8d4e6').setOrigin(0.5);
     }
 
-    // где сейчас игрок
-    const at = d.current !== null ? this.nodePos(c.node(d.current)) : { x: this.colX(0) - 20 * k, y: this.mapRect.y + this.mapRect.h / 2 };
-    const flag = this.add.graphics();
-    flag.fillStyle(0x3d2718, 1).fillRect(at.x - 2 * k, at.y - 70 * k, 4 * k, 44 * k);
-    flag.fillStyle(0x3d7bd6, 1).fillTriangle(at.x + 2 * k, at.y - 70 * k, at.x + 2 * k, at.y - 50 * k, at.x + 30 * k, at.y - 60 * k);
+    this.drawPlayerBoat();
+  }
+
+  /** Точка в море у острова, со стороны направления движения. */
+  private boatAnchor(n: IslandNode, dir: { x: number; y: number }): { x: number; y: number } {
+    const p = this.nodePos(n);
+    const dim = this.nodeDims.get(n.id) ?? { w: 80 * this.k, h: 56 * this.k };
+    return {
+      x: p.x - dir.x * (dim.w / 2 + 30 * this.k),
+      y: p.y - dir.y * (dim.h / 2 + 22 * this.k),
+    };
+  }
+
+  /** Корабль игрока стоит в море у текущего острова; после победы доплывает от прежнего острова к новому. */
+  private drawPlayerBoat(): void {
+    const d = this.campaign.data;
+    const k = this.k;
+    const current = d.current !== null ? this.campaign.node(d.current) : null;
+    const fromId = this.registry.get('campaignBoatFrom') as number | null | undefined;
+    this.registry.remove('campaignBoatFrom');
+    let at = { x: this.colX(0) - 54 * k, y: this.mapRect.y + this.mapRect.h / 2 };
+    let to: { x: number; y: number } | null = null;
+    let dir = { x: 1, y: 0 };
+    if (current) {
+      const previous = fromId !== null && fromId !== undefined && fromId !== current.id ? this.campaign.node(fromId) : null;
+      if (previous) {
+        const a = this.nodePos(previous), b = this.nodePos(current);
+        const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        dir = { x: (b.x - a.x) / len, y: (b.y - a.y) / len };
+        at = this.boatAnchor(previous, dir);
+        to = this.boatAnchor(current, dir);
+      } else {
+        at = this.boatAnchor(current, dir);
+      }
+    }
+    const boat = this.add.sprite(at.x, at.y, 'boat').setScale(0.16 * k).setDepth(20).setFlipX(dir.x < 0);
+    boat.play(fxKey('boat'));
+    const bob = () => this.tweens.add({ targets: boat, y: boat.y - 4 * k, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (to) {
+      sfx.play('splash', 0.35);
+      this.tweens.add({ targets: boat, x: to.x, y: to.y, duration: 1100, ease: 'Sine.easeInOut', onComplete: bob });
+    } else {
+      bob();
+    }
   }
 
   private drawNode(n: IslandNode, isAvailable: boolean): void {
@@ -187,6 +229,7 @@ export class CampaignScene extends Phaser.Scene {
       bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x + 1); by0 = Math.min(by0, y); by1 = Math.max(by1, y + 1);
     }
     const w = (bx1 - bx0) * CELL, h = (by1 - by0) * CELL;
+    this.nodeDims.set(n.id, { w, h });
     const foam = Math.max(1, Math.round(CELL * 0.6));
     const ox = Math.round(p.x - w / 2) - bx0 * CELL, oy = Math.round(p.y - h / 2) - by0 * CELL;
     const box = { x: ox + bx0 * CELL, y: oy + by0 * CELL };
@@ -426,6 +469,7 @@ export class CampaignScene extends Phaser.Scene {
   private startBattle(n: IslandNode, squads: SquadDef[]): void {
     if (!squads.length) return;
     this.scene.stop('IslandPreview');
+    this.registry.set('campaignBoatFrom', this.campaign.data.current);
     this.registry.set('pendingNode', n.id);
     this.scene.start('Battle', {
       seed: n.seed,
