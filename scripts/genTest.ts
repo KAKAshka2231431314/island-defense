@@ -38,7 +38,7 @@ let fails = 0, attempts = 0, lv2 = 0, lv3 = 0, houses = 0, landings = 0, stairs 
 // стороны высадок (куда смотрит лодка) и виды подъёмов
 const landDir: Record<string, number> = {};
 const stairSide: Record<string, number> = {};
-let oneSided = 0, barracks = 0, lowShare = 0, hills = 0, houseGap = 0, gapN = 0, minGap = 99;
+let oneSided = 0, barracks = 0, lowShare = 0, hills = 0, houseGap = 0, gapN = 0, minGap = 99, bushPairs = 0;
 const t0 = performance.now();
 for (let seed = 1; seed <= n; seed++) {
   try {
@@ -78,7 +78,7 @@ for (let seed = 1; seed <= n; seed++) {
       throw new Error(`Нет обязательного подъёма снизу: сид ${seed}`);
     }
     for (const st of d.grid.stairs) {
-      if ((st.side ?? 'front') !== 'front') throw new Error(`Боковой подъём на новой карте: сид ${seed}`);
+      if (!['front', 'left', 'right'].includes(st.side ?? 'front')) throw new Error(`Неизвестный подъём: сид ${seed}`);
     }
     if (max >= 2) lv2++;
     if (max >= 3) lv3++;
@@ -95,8 +95,10 @@ for (let seed = 1; seed <= n; seed++) {
     let beachTop = bottom - (ISLAND.lowlandDepth + 2);
     if (beachTop % 2 === 1) beachTop--;
     for (let y = 0; y < d.grid.h; y++) for (let x = 0; x < d.grid.w; x++) {
-      if (d.grid.getLevel(x, y) !== 1 || d.grid.stairAt(x, y) || d.grid.cliffLevel(x, y) > 0) continue;
-      if (y < beachTop) throw new Error(`Пляж выше южной полосы: сид ${seed}, клетка ${x},${y}`);
+      if (d.grid.getLevel(x, y) !== 1 || d.grid.stairAt(x, y) || d.grid.cliffLevel(x, y) > 0 || d.grid.isBlocked(x, y)) continue;
+      const sideRampApproach = d.grid.stairs.some((st) => (st.side === 'left' || st.side === 'right')
+        && IslandGrid.stairCellsOf(st).some(([sx, sy]) => d.grid.canStep(x, y, sx, sy) || d.grid.canStep(sx, sy, x, y)));
+      if (y < beachTop && !sideRampApproach) throw new Error(`Пляж выше южной полосы: сид ${seed}, клетка ${x},${y}`);
     }
     if (dirs.size <= 1) oneSided++;
     hills += floodComponents(d.grid.w, d.grid.h, (x, y) => d.grid.getLevel(x, y) === 2).length - 1;
@@ -150,14 +152,31 @@ for (let seed = 1; seed <= n; seed++) {
       }
     }
     if (!isFullyConnected(d.grid)) console.log('НЕ СВЯЗАН', seed);
+    for (const q of d.squares) {
+      for (const o of d.decor) {
+        if ((o.kind !== 'tree' && o.kind !== 'bush') || o.x < q.x || o.x > q.x + 1 || o.y < q.y || o.y > q.y + 1) continue;
+        throw new Error(`Зона отряда содержит дерево или куст: сид ${seed}, клетка ${o.x},${o.y}`);
+      }
+    }
+    bushPairs += d.decor.filter((t) => t.kind === 'tree'
+      && d.decor.some((b) => b.kind === 'bush' && Math.hypot(b.x - t.x, b.y - t.y) <= 1.5)).length;
     const zoned = new Set(d.squares.flatMap((q) => [q.y * d.grid.w + q.x, q.y * d.grid.w + q.x + 1, (q.y + 1) * d.grid.w + q.x, (q.y + 1) * d.grid.w + q.x + 1]));
+    const decorative = new Set<number>();
+    for (const o of d.decor) {
+      if (o.kind !== 'tree' && o.kind !== 'bush') continue;
+      const qx = o.x - (o.x % 2);
+      for (const qy of [o.y, o.y - 1]) {
+        if (qy < 0 || qy + 1 >= d.grid.h) continue;
+        for (const c of [qy * d.grid.w + qx, qy * d.grid.w + qx + 1, (qy + 1) * d.grid.w + qx, (qy + 1) * d.grid.w + qx + 1]) decorative.add(c);
+      }
+    }
     for (let y = 0; y < d.grid.h; y++) for (let x = 0; x < d.grid.w; x++) {
       const i = d.grid.idx(x, y);
       if (d.grid.isWater(x, y)) {
         const banks = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => d.grid.isLand(x + dx, y + dy) || d.grid.cliffLevel(x + dx, y + dy) > 0).length;
         if (banks >= 3) throw new Error(`Узкий разрыв земли: сид ${seed}, клетка ${x},${y}`);
       }
-      if (d.grid.isWalkable(x, y) && !d.grid.stairAt(x, y) && !zoned.has(i)) throw new Error(`Земля без квадрата: сид ${seed}, клетка ${x},${y}`);
+      if (d.grid.isWalkable(x, y) && !d.grid.stairAt(x, y) && !zoned.has(i) && !decorative.has(i)) throw new Error(`Земля без квадрата: сид ${seed}, клетка ${x},${y}`);
       if (!d.grid.isWalkable(x, y) || d.grid.stairAt(x, y)) continue;
       for (const [dx, dy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
         const nx = x + dx, ny = y + dy;
@@ -168,6 +187,8 @@ for (let seed = 1; seed <= n; seed++) {
   } catch (e) { fails++; console.log('FAIL', seed, (e as Error).message); }
 }
 const ok = n - fails;
+if (ok && !bushPairs) throw new Error('Рядом с деревьями не появились кусты');
+if (ok && !stairSide.left && !stairSide.right) throw new Error('На 10 картах нет бокового подъёма');
 console.log(`сидов ${n}, провалов ${fails}, ср. попыток ${(attempts / ok).toFixed(2)}, ${((performance.now() - t0) / n).toFixed(1)} мс/остров`);
 console.log('причины отбраковки:', JSON.stringify(genStats));
 console.log('высадки по сторонам:', JSON.stringify(landDir), 'островов с высадкой с одной стороны:', oneSided);
