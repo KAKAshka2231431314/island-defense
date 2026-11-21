@@ -90,6 +90,14 @@ for (let seed = 1; seed <= n; seed++) {
       dirs.add(k);
       landDir[k] = (landDir[k] ?? 0) + 1;
     }
+    let bottom = -1;
+    for (let i = 0; i < d.grid.level.length; i++) if (d.grid.level[i] >= 1) bottom = Math.max(bottom, Math.floor(i / d.grid.w));
+    let beachTop = bottom - (ISLAND.lowlandDepth + 2);
+    if (beachTop % 2 === 1) beachTop--;
+    for (let y = 0; y < d.grid.h; y++) for (let x = 0; x < d.grid.w; x++) {
+      if (d.grid.getLevel(x, y) !== 1 || d.grid.stairAt(x, y) || d.grid.cliffLevel(x, y) > 0) continue;
+      if (y < beachTop) throw new Error(`Пляж выше южной полосы: сид ${seed}, клетка ${x},${y}`);
+    }
     if (dirs.size <= 1) oneSided++;
     hills += floodComponents(d.grid.w, d.grid.h, (x, y) => d.grid.getLevel(x, y) === 2).length - 1;
     { const c = d.houses.map((h) => ({ x: h.x + h.width / 2, y: h.y })); let m = 99; for (let a = 0; a < c.length; a++) for (let b = a + 1; b < c.length; b++) m = Math.min(m, Math.hypot(c[a].x - c[b].x, c[a].y - c[b].y)); if (m < 99) { houseGap += m; gapN++; minGap = Math.min(minGap, m); } }

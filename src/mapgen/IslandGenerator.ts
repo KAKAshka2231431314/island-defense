@@ -206,7 +206,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
   const at = (arr: Uint8Array, x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : arr[y * W + x]);
   /** основной уровень острова: 2 у острова-скалы, 1 у плоского */
   const base = P.rockBase ? 2 : 1;
-  if (P.rockBase && !carveLowlands(land, level, W, H, heightNoise)) return reject('plateau-small');
+  if (P.rockBase && !carveLowlands(land, level, W, H)) return reject('plateau-small');
   const nearLower = (x: number, y: number) => {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (at(level, x + dx, y + dy) < base) return true;
     return false;
@@ -516,32 +516,23 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
 
 
 /**
- * Низины как в Bad North: суша у воды — уровень 1 (туда пристают лодки), середина острова — плато уровня 2.
- * Клетка становится плато, если суша тянется от неё на lowlandDepth клеток во все стороны (на юг — на клетку
- * дальше: там под плато ряд скалы). Местами на юге плато доходит до воды и обрывается скалой в море.
- * Плато выровнено по парам столбцов и собрано из блоков 2×2; берётся самый большой кусок.
+ * Широкий остров для высадки с моря: северный и боковые берега — плато уровня 2,
+ * а по нижнему краю каждой пары колонок — сплошной пляж уровня 1.
  */
-function carveLowlands(land: Uint8Array, level: Uint8Array, W: number, H: number, noise: NoiseFunction2D): boolean {
-  const isLand = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && land[y * W + x] === 1;
-  const D = P.lowlandDepth;
-  const southCliff = (x: number) => fbm(noise, (x >> 1) * P.southCliffFreq + 200, 7.3, 1) > P.southCliffThreshold;
-  const plateau = new Uint8Array(W * H);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (!isLand(x, y)) continue;
-      const south = southCliff(x) ? 0 : D + 1;
-      let ok = true;
-      for (let dy = -D; dy <= south && ok; dy++) for (let dx = -D; dx <= D; dx++) if (!isLand(x + dx, y + dy)) { ok = false; break; }
-      if (ok) plateau[y * W + x] = 1;
-    }
+function carveLowlands(land: Uint8Array, level: Uint8Array, W: number, H: number): boolean {
+  const D = P.lowlandDepth + 2;
+  let bottom = -1;
+  for (let i = 0; i < land.length; i++) if (land[i]) bottom = Math.max(bottom, (i / W) | 0);
+  let beachTop = bottom - D;
+  if (beachTop % 2 === 1) beachTop--;
+  let plateauCells = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x;
+    if (!land[i]) continue;
+    level[i] = y >= beachTop ? 1 : 2;
+    if (level[i] === 2) plateauCells++;
   }
-  snapColumns(plateau, W, H);
-  const opened = open2x2(plateau, W, H);
-  const comps = floodComponents(W, H, (x, y) => opened[y * W + x] === 1 && isLand(x, y)).sort((a, b) => b.length - a.length);
-  if (!comps.length || comps[0].length < P.plateauMinCells) return false;
-  for (let i = 0; i < level.length; i++) if (land[i]) level[i] = 1;
-  for (const i of comps[0]) level[i] = 2;
-  return true;
+  return plateauCells >= P.plateauMinCells;
 }
 
 /**
