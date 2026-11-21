@@ -1,7 +1,7 @@
 import { createNoise2D, type NoiseFunction2D } from 'simplex-noise';
 import { ISLAND } from '../data/balance';
 import { distanceField, floodComponents, isFullyConnected, walkComponents, walkDistances } from './connectivity';
-import { IslandGrid } from './IslandGrid';
+import { IslandGrid, type StairSide } from './IslandGrid';
 import { packSquares, squareCells, type Square } from './zones';
 import { mulberry32, randInt, type Rng } from './rng';
 
@@ -206,7 +206,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
   const at = (arr: Uint8Array, x: number, y: number) => (x < 0 || y < 0 || x >= W || y >= H ? 0 : arr[y * W + x]);
   /** основной уровень острова: 2 у острова-скалы, 1 у плоского */
   const base = P.rockBase ? 2 : 1;
-  if (P.rockBase && !carveLowlands(land, level, W, H)) return reject('plateau-small');
+  if (P.rockBase && !carveLowlands(land, level, W, H, heightNoise)) return reject('plateau-small');
   const nearLower = (x: number, y: number) => {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (at(level, x + dx, y + dy) < base) return true;
     return false;
@@ -239,11 +239,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     // холмы уровня 2 в широкой низине; выше террас уровня 3 остров не поднимается
     addBlocks(level, W, H, 1, P.lowlandHillMax, rng);
   }
-  // Под южным обрывом тоже не оставляем узких водных карманов; выше пляжа они становятся плато.
-  let landBottom = -1;
-  for (let i = 0; i < land.length; i++) if (land[i]) landBottom = Math.max(landBottom, (i / W) | 0);
-  let beachTop = landBottom - (P.lowlandDepth + 2);
-  if (beachTop % 2 === 1) beachTop--;
+  // Под южным обрывом тоже не оставляем узких водных карманов: под скалой должна быть земля, а не просвет моря.
   for (;;) {
     const cliffs = new IslandGrid(W, H, level);
     const fill: number[] = [];
@@ -258,7 +254,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
       if (banks >= 3) fill.push(i);
     }
     if (!fill.length) break;
-    for (const i of fill) level[i] = Math.floor(i / W) >= beachTop ? 1 : 2;
+    for (const i of fill) level[i] = 1;
   }
 
   // ---------- 5. лестницы + связность ----------
@@ -369,7 +365,6 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     for (let x = 0; x < W; x++) {
       if (squareOf[y * W + x] < 0 || grid.getLevel(x, y) !== 1 || stairEntry[y * W + x]) continue;
       for (const [dx, dy] of DIRS4) {
-        if (dy !== 1) continue; // враги нападают только с юга
         let clear = true;
         for (let k = 1; k <= P.landingClearance && clear; k++) clear = openWater(x + dx * k, y + dy * k);
         if (clear) landingCands.push({ x, y, dx, dy });
@@ -541,23 +536,32 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
 
 
 /**
- * Широкий остров для высадки с моря: северный и боковые берега — плато уровня 2,
- * а по нижнему краю каждой пары колонок — сплошной пляж уровня 1.
+ * Низины как в Bad North: суша у воды — уровень 1 (туда пристают лодки), середина острова — плато уровня 2.
+ * Клетка становится плато, если суша тянется от неё на lowlandDepth клеток во все стороны (на юг — на клетку
+ * дальше: там под плато ряд скалы). Местами на юге плато доходит до воды и обрывается скалой в море.
+ * Плато выровнено по парам столбцов и собрано из блоков 2×2; берётся самый большой кусок.
  */
-function carveLowlands(land: Uint8Array, level: Uint8Array, W: number, H: number): boolean {
-  const D = P.lowlandDepth + 2;
-  let bottom = -1;
-  for (let i = 0; i < land.length; i++) if (land[i]) bottom = Math.max(bottom, (i / W) | 0);
-  let beachTop = bottom - D;
-  if (beachTop % 2 === 1) beachTop--;
-  let plateauCells = 0;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const i = y * W + x;
-    if (!land[i]) continue;
-    level[i] = y >= beachTop ? 1 : 2;
-    if (level[i] === 2) plateauCells++;
+function carveLowlands(land: Uint8Array, level: Uint8Array, W: number, H: number, noise: NoiseFunction2D): boolean {
+  const isLand = (x: number, y: number) => x >= 0 && y >= 0 && x < W && y < H && land[y * W + x] === 1;
+  const D = P.lowlandDepth;
+  const southCliff = (x: number) => fbm(noise, (x >> 1) * P.southCliffFreq + 200, 7.3, 1) > P.southCliffThreshold;
+  const plateau = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      if (!isLand(x, y)) continue;
+      const south = southCliff(x) ? 0 : D + 1;
+      let ok = true;
+      for (let dy = -D; dy <= south && ok; dy++) for (let dx = -D; dx <= D; dx++) if (!isLand(x + dx, y + dy)) { ok = false; break; }
+      if (ok) plateau[y * W + x] = 1;
+    }
   }
-  return plateauCells >= P.plateauMinCells;
+  snapColumns(plateau, W, H);
+  const opened = open2x2(plateau, W, H);
+  const comps = floodComponents(W, H, (x, y) => opened[y * W + x] === 1 && isLand(x, y)).sort((a, b) => b.length - a.length);
+  if (!comps.length || comps[0].length < P.plateauMinCells) return false;
+  for (let i = 0; i < level.length; i++) if (land[i]) level[i] = 1;
+  for (const i of comps[0]) level[i] = 2;
+  return true;
 }
 
 /**
@@ -664,8 +668,11 @@ function fillGaps(mask: Uint8Array, W: number, H: number, allowed: (x: number, y
 
 
 /**
- * Подъёмы на плато: только прямые лестницы с юга. Для разнообразия используются
- * одиночные и широкие ступени в разных местах южной стены.
+ * Подъёмы на плато (уровни 2..max), в каждую нижнюю область — свои: прямые ступени в ряду скалы под нижним
+ * краем (по возможности в две клетки шириной, по сетке квадратов) и боковые склоны вдоль левого или правого
+ * края плато. На основном плато обязательны хотя бы один подъём слева, снизу и справа; сверху — необязательно.
+ * Если плато не к чему спустить — опускает его на уровень ниже и возвращает false (пересобрать сетку);
+ * null — у основы острова-скалы нет подходящего места для обязательных подъёмов.
  */
 function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | null {
   const W = grid.w, H = grid.h;
@@ -674,45 +681,75 @@ function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | n
     const lowerSize: number[] = [];
     floodComponents(W, H, (x, y) => grid.getLevel(x, y) === L - 1 && grid.cliffLevel(x, y) === 0)
       .forEach((c, id) => { lowerSize[id] = c.length; for (const i of c) lowerId[i] = id; });
+    // клетка (x, y) — скала плато уровня L, над ней плато, под ней проходимая земля уровня L−1
     const okStep = (x: number, y: number) =>
       grid.getLevel(x, y - 1) === L && grid.cliffLevel(x, y - 1) === 0 && !grid.stairAt(x, y - 1)
       && grid.getLevel(x, y) === L - 1 && grid.cliffLevel(x, y) === L && !grid.stairAt(x, y)
       && grid.getLevel(x, y + 1) === L - 1 && grid.cliffLevel(x, y + 1) === 0 && !grid.stairAt(x, y + 1);
-    type Cand = { x: number; y: number; width: number; region: number; side: 'front' };
-    const fits = (c: Cand) => Array.from({ length: c.width }, (_, k) => okStep(c.x + k, c.y)).every(Boolean);
+    const lowOpen = (x: number, y: number) => grid.getLevel(x, y) === L - 1 && grid.cliffLevel(x, y) === 0 && !grid.stairAt(x, y);
+    const highOpen = (x: number, y: number) => grid.getLevel(x, y) === L && grid.cliffLevel(x, y) === 0 && !grid.stairAt(x, y);
+    // Боковой склон стоит только на вертикальном боку плато: снизу высокая клетка продолжается,
+    // поэтому склон не превращается в ещё одну лестницу на южном крае.
+    const okSide = (x: number, y: number, dir: -1 | 1) => {
+      const px = x - dir;
+      return highOpen(px, y) && highOpen(px, y + 1)
+        && lowOpen(x, y) && lowOpen(x, y + 1) && lowOpen(x, y + 2);
+    };
+    type Cand = { x: number; y: number; width: number; region: number; side: StairSide };
+    const fits = (c: Cand) => c.side === 'front'
+      ? Array.from({ length: c.width }, (_, k) => okStep(c.x + k, c.y)).every(Boolean)
+      : okSide(c.x, c.y, c.side === 'left' ? -1 : 1);
     const comps = floodComponents(W, H, (x, y) => grid.getLevel(x, y) >= L);
     const largest = Math.max(...comps.map((c) => c.length));
     for (const comp of comps) {
       const inComp = new Set(comp);
       const cands: Cand[] = [];
       for (const i of comp) {
-        const x = i % W, y = ((i / W) | 0) + 1;
+        const px = i % W, py = (i / W) | 0;
+        for (const dir of [-1, 1] as const) {
+          const sx = px + dir;
+          if (okSide(sx, py, dir)) cands.push({ x: sx, y: py, width: 1, region: lowerId[(py + 1) * W + sx], side: dir < 0 ? 'left' : 'right' });
+        }
+        const x = px, y = py + 1;
         if (!okStep(x, y)) continue;
         const region = lowerId[(y + 1) * W + x];
+        // в две клетки — от чётного столбца, как квадраты
         if (x % 2 === 0 && okStep(x + 1, y) && inComp.has((y - 1) * W + x + 1)) cands.push({ x, y, width: 2, region, side: 'front' });
         else cands.push({ x, y, width: 1, region, side: 'front' });
       }
       if (!cands.length) {
+        // основу острова-скалы не опускаем — попытка бракуется
         if (P.rockBase && L === 2 && comp.length === largest) return null;
         for (const i of comp) level[i] = L - 1;
         return false;
       }
       const required: Cand[] = [];
       if (P.rockBase && L === 2 && comp.length === largest) {
-        const options = cands.filter(fits);
-        const c = options[Math.floor(rng() * options.length)];
-        if (!c) return null;
-        grid.addStair({ x: c.x, y: c.y, width: c.width, level: L, side: c.side });
-        required.push(c);
+        // На основное плато всегда можно подняться с запада, юга и востока; север не обязателен.
+        if (!cands.some((c) => c.side === 'front')) return null;
+        for (const side of ['left', 'front', 'right'] as const) {
+          const options = cands.filter((c) => c.side === side && fits(c));
+          const c = options[Math.floor(rng() * options.length)];
+          if (!c) return null;
+          grid.addStair({ x: c.x, y: c.y, width: c.width, level: L, side: c.side });
+          required.push(c);
+        }
       }
       for (const region of new Set(cands.map((c) => c.region))) {
         const mine = cands.filter((o) => o.region === region);
-        const wide = mine.filter((o) => o.width === 2);
+        const fronts = mine.filter((o) => o.side === 'front');
+        const sides = mine.filter((o) => o.side !== 'front');
+        const wide = fronts.filter((o) => o.width === 2);
+        // с низины на плато основы — подъёмов больше: низина тянется вокруг всего острова
         const extra = P.rockBase && L === 2 ? Math.floor((lowerSize[region] ?? 0) / P.stairRegionCells) : 0;
         const want = randInt(rng, P.stairsPerPlateau[0], P.stairsPerPlateau[1]) + extra;
         const picks = required.filter((c) => c.region === region);
-        const frontPool = wide.length && rng() < 0.65 ? wide : mine;
-        const pool = frontPool.filter((o) => !picks.includes(o));
+        if (!picks.some((c) => c.side !== 'front') && sides.length && (!fronts.length || rng() < P.sideRampChance)) {
+          const c = sides.find((o) => !picks.includes(o) && fits(o));
+          if (c) picks.push(c);
+        }
+        const frontPool = wide.length ? wide : fronts;
+        const pool = [...frontPool, ...(frontPool.length ? [] : sides)].filter((o) => !picks.includes(o));
         picks.push(...spreadPick(rng, pool, want - picks.length, 3, picks));
         for (const c of picks) {
           if (!required.includes(c) && fits(c)) grid.addStair({ x: c.x, y: c.y, width: c.width, level: L, side: c.side });

@@ -2,23 +2,23 @@
 
 /** Генерация острова. Размеры — в клетках 64×64. */
 export const ISLAND = {
-  width: 42,
-  height: 29,
+  width: 34,
+  height: 25,
   /** зоны отрядов — квадраты 2×2 клетки (mapgen/zones.ts → packSquares); обрезки закрываются декором */
   /** клеток воды по краю карты (там появляются лодки) */
   borderWater: 3,
-  /** радиус эллипса-маски относительно размера карты: широкий берег как при высадке с моря */
-  radiusX: 0.4,
-  radiusY: 0.32,
+  /** радиус эллипса-маски относительно размера карты */
+  radiusX: 0.36,
+  radiusY: 0.34,
   /** случайный сдвиг центра острова, доля от размера */
-  centerJitter: 0.03,
+  centerJitter: 0.05,
   noiseFreq: 0.12,
   noiseOctaves: 3,
   noiseAmp: 0.55,
   landThreshold: 0.08,
   smoothPasses: 2,
-  minLandCells: 340,
-  maxLandCells: 650,
+  minLandCells: 240,
+  maxLandCells: 470,
 
   /** остров как в Bad North: почти вдоль всего берега — низина уровня 1 (к ней пристают лодки),
    *  середина — плато уровня 2, на нём террасы уровня 3 */
@@ -44,9 +44,11 @@ export const ISLAND = {
   level3Chance: 0.5,
   level3Threshold: 0.3,
   level3MinSize: 4,
-  stairsPerPlateau: [1, 3] as [number, number],
+  stairsPerPlateau: [1, 2] as [number, number],
   /** холмы уровня 2 в низине — там, где берег достаточно широкий (блок 2×2 с лестницей) */
   lowlandHillMax: 2,
+  /** вероятность, что в нижнюю область с плато ведёт боковой склон (слева/справа), а не только ступени в обрыве */
+  sideRampChance: 0.65,
 
   /** точки высадки */
   landingMin: 3,
