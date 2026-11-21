@@ -1,5 +1,6 @@
 import { CAMPAIGN } from '../data/balance';
 import type { ItemId } from '../entities/Squad';
+import { shuffledIslandPool } from './islandPools';
 import { mulberry32, randInt, type Rng } from './rng';
 
 export type RewardKind = 'none' | 'item' | 'recruit';
@@ -27,6 +28,16 @@ const ITEMS: ItemId[] = ['bomb', 'horn', 'shield'];
 /** Граф островов: колонки слева направо, у каждого острова 1–2 связи вперёд; финал — отдельно справа. */
 export function generateCampaignMap(seed: number): IslandNode[] {
   const rng: Rng = mulberry32(seed ^ 0x51ed270b);
+  const pools = {
+    easy: shuffledIslandPool(seed, 'easy'),
+    medium: shuffledIslandPool(seed, 'medium'),
+    hard: shuffledIslandPool(seed, 'hard'),
+  };
+  const used = { easy: 0, medium: 0, hard: 0 };
+  const pickSeed = (col: number) => {
+    const pool = col <= 1 ? 'easy' : col <= 3 ? 'medium' : 'hard';
+    return pools[pool][used[pool]++ % pools[pool].length];
+  };
   const nodes: IslandNode[] = [];
   const cols: IslandNode[][] = [];
   let id = 0;
@@ -40,7 +51,7 @@ export function generateCampaignMap(seed: number): IslandNode[] {
         id: id++, col: c, row: r,
         x: (c + 0.5) / (CAMPAIGN.columns + 1),
         y: (r + 0.5) / n + (rng() - 0.5) * (0.25 / n),
-        seed: (rng() * 1e9) >>> 0,
+        seed: pickSeed(c),
         difficulty: c,
         isFinal: false,
         reward,
@@ -55,7 +66,7 @@ export function generateCampaignMap(seed: number): IslandNode[] {
   }
   const final: IslandNode = {
     id: id++, col: CAMPAIGN.columns, row: 0, x: (CAMPAIGN.columns + 0.5) / (CAMPAIGN.columns + 1), y: 0.5,
-    seed: (rng() * 1e9) >>> 0, difficulty: CAMPAIGN.columns - 1 + CAMPAIGN.finalDifficultyBonus, isFinal: true,
+    seed: pickSeed(CAMPAIGN.columns), difficulty: CAMPAIGN.columns - 1 + CAMPAIGN.finalDifficultyBonus, isFinal: true,
     reward: 'none', item: null, links: [], state: 'open',
   };
   nodes.push(final);
