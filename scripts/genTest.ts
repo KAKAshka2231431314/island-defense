@@ -78,7 +78,7 @@ for (let seed = 1; seed <= n; seed++) {
       throw new Error(`Нет обязательного подъёма снизу: сид ${seed}`);
     }
     for (const st of d.grid.stairs) {
-      if (!['front', 'left', 'right'].includes(st.side ?? 'front')) throw new Error(`Неизвестный подъём: сид ${seed}`);
+      if ((st.side ?? 'front') !== 'front') throw new Error(`Боковая лестница на новой карте: сид ${seed}`);
     }
     if (max >= 2) lv2++;
     if (max >= 3) lv3++;
@@ -96,9 +96,7 @@ for (let seed = 1; seed <= n; seed++) {
     if (beachTop % 2 === 1) beachTop--;
     for (let y = 0; y < d.grid.h; y++) for (let x = 0; x < d.grid.w; x++) {
       if (d.grid.getLevel(x, y) !== 1 || d.grid.stairAt(x, y) || d.grid.cliffLevel(x, y) > 0 || d.grid.isBlocked(x, y)) continue;
-      const sideRampApproach = d.grid.stairs.some((st) => (st.side === 'left' || st.side === 'right')
-        && IslandGrid.stairCellsOf(st).some(([sx, sy]) => d.grid.canStep(x, y, sx, sy) || d.grid.canStep(sx, sy, x, y)));
-      if (y < beachTop && !sideRampApproach) throw new Error(`Пляж выше южной полосы: сид ${seed}, клетка ${x},${y}`);
+      if (y < beachTop) throw new Error(`Пляж выше южной полосы: сид ${seed}, клетка ${x},${y}`);
     }
     if (dirs.size <= 1) oneSided++;
     hills += floodComponents(d.grid.w, d.grid.h, (x, y) => d.grid.getLevel(x, y) === 2).length - 1;
@@ -188,7 +186,7 @@ for (let seed = 1; seed <= n; seed++) {
 }
 const ok = n - fails;
 if (ok && !bushPairs) throw new Error('Рядом с деревьями не появились кусты');
-if (ok && !stairSide.left && !stairSide.right) throw new Error('На 10 картах нет бокового подъёма');
+if (ok && (stairSide.left || stairSide.right)) throw new Error('На новых картах остались боковые подъёмы');
 console.log(`сидов ${n}, провалов ${fails}, ср. попыток ${(attempts / ok).toFixed(2)}, ${((performance.now() - t0) / n).toFixed(1)} мс/остров`);
 console.log('причины отбраковки:', JSON.stringify(genStats));
 console.log('высадки по сторонам:', JSON.stringify(landDir), 'островов с высадкой с одной стороны:', oneSided);

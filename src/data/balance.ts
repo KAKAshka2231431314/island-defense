@@ -44,7 +44,7 @@ export const ISLAND = {
   level3Chance: 0.5,
   level3Threshold: 0.3,
   level3MinSize: 4,
-  stairsPerPlateau: [1, 2] as [number, number],
+  stairsPerPlateau: [1, 3] as [number, number],
   /** холмы уровня 2 в низине — там, где берег достаточно широкий (блок 2×2 с лестницей) */
   lowlandHillMax: 2,
 

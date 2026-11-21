@@ -1,7 +1,7 @@
 import { createNoise2D, type NoiseFunction2D } from 'simplex-noise';
 import { ISLAND } from '../data/balance';
 import { distanceField, floodComponents, isFullyConnected, walkComponents, walkDistances } from './connectivity';
-import { IslandGrid, type StairSide } from './IslandGrid';
+import { IslandGrid } from './IslandGrid';
 import { packSquares, squareCells, type Square } from './zones';
 import { mulberry32, randInt, type Rng } from './rng';
 
@@ -664,8 +664,8 @@ function fillGaps(mask: Uint8Array, W: number, H: number, allowed: (x: number, y
 
 
 /**
- * Подъёмы на плато: обязательная прямая лестница с юга плюс разнообразные
- * боковые склоны и дополнительные ступени там, где для них есть безопасное место.
+ * Подъёмы на плато: только прямые лестницы с юга. Для разнообразия используются
+ * одиночные и широкие ступени в разных местах южной стены.
  */
 function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | null {
   const W = grid.w, H = grid.h;
@@ -678,28 +678,15 @@ function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | n
       grid.getLevel(x, y - 1) === L && grid.cliffLevel(x, y - 1) === 0 && !grid.stairAt(x, y - 1)
       && grid.getLevel(x, y) === L - 1 && grid.cliffLevel(x, y) === L && !grid.stairAt(x, y)
       && grid.getLevel(x, y + 1) === L - 1 && grid.cliffLevel(x, y + 1) === 0 && !grid.stairAt(x, y + 1);
-    const lowOpen = (x: number, y: number) => grid.getLevel(x, y) === L - 1 && grid.cliffLevel(x, y) === 0 && !grid.stairAt(x, y);
-    const highOpen = (x: number, y: number) => grid.getLevel(x, y) === L && grid.cliffLevel(x, y) === 0 && !grid.stairAt(x, y);
-    const okSide = (x: number, y: number, dir: -1 | 1) => {
-      const px = x - dir;
-      return highOpen(px, y) && highOpen(px, y + 1) && lowOpen(x, y) && lowOpen(x, y + 1) && lowOpen(x, y + 2);
-    };
-    type Cand = { x: number; y: number; width: number; region: number; side: StairSide };
-    const fits = (c: Cand) => c.side === 'front'
-      ? Array.from({ length: c.width }, (_, k) => okStep(c.x + k, c.y)).every(Boolean)
-      : okSide(c.x, c.y, c.side === 'left' ? -1 : 1);
+    type Cand = { x: number; y: number; width: number; region: number; side: 'front' };
+    const fits = (c: Cand) => Array.from({ length: c.width }, (_, k) => okStep(c.x + k, c.y)).every(Boolean);
     const comps = floodComponents(W, H, (x, y) => grid.getLevel(x, y) >= L);
     const largest = Math.max(...comps.map((c) => c.length));
     for (const comp of comps) {
       const inComp = new Set(comp);
       const cands: Cand[] = [];
       for (const i of comp) {
-        const px = i % W, py = (i / W) | 0;
-        for (const dir of [-1, 1] as const) {
-          const sx = px + dir;
-          if (okSide(sx, py, dir)) cands.push({ x: sx, y: py, width: 1, region: lowerId[(py + 1) * W + sx], side: dir < 0 ? 'left' : 'right' });
-        }
-        const x = px, y = py + 1;
+        const x = i % W, y = ((i / W) | 0) + 1;
         if (!okStep(x, y)) continue;
         const region = lowerId[(y + 1) * W + x];
         if (x % 2 === 0 && okStep(x + 1, y) && inComp.has((y - 1) * W + x + 1)) cands.push({ x, y, width: 2, region, side: 'front' });
@@ -712,7 +699,7 @@ function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | n
       }
       const required: Cand[] = [];
       if (P.rockBase && L === 2 && comp.length === largest) {
-        const options = cands.filter((c) => c.side === 'front' && fits(c));
+        const options = cands.filter(fits);
         const c = options[Math.floor(rng() * options.length)];
         if (!c) return null;
         grid.addStair({ x: c.x, y: c.y, width: c.width, level: L, side: c.side });
@@ -720,18 +707,12 @@ function placeStairs(grid: IslandGrid, level: Uint8Array, rng: Rng): boolean | n
       }
       for (const region of new Set(cands.map((c) => c.region))) {
         const mine = cands.filter((o) => o.region === region);
-        const fronts = mine.filter((o) => o.side === 'front');
-        const sides = mine.filter((o) => o.side !== 'front');
-        const wide = fronts.filter((o) => o.width === 2);
+        const wide = mine.filter((o) => o.width === 2);
         const extra = P.rockBase && L === 2 ? Math.floor((lowerSize[region] ?? 0) / P.stairRegionCells) : 0;
         const want = randInt(rng, P.stairsPerPlateau[0], P.stairsPerPlateau[1]) + extra;
         const picks = required.filter((c) => c.region === region);
-        if (!picks.some((c) => c.side !== 'front') && sides.length) {
-          const c = sides[Math.floor(rng() * sides.length)];
-          if (fits(c)) picks.push(c);
-        }
-        const frontPool = wide.length ? wide : fronts;
-        const pool = [...frontPool, ...sides].filter((o) => !picks.includes(o));
+        const frontPool = wide.length && rng() < 0.65 ? wide : mine;
+        const pool = frontPool.filter((o) => !picks.includes(o));
         picks.push(...spreadPick(rng, pool, want - picks.length, 3, picks));
         for (const c of picks) {
           if (!required.includes(c) && fits(c)) grid.addStair({ x: c.x, y: c.y, width: c.width, level: L, side: c.side });
