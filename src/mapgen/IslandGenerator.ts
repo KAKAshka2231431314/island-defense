@@ -533,10 +533,10 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
   scatter('rock', Math.round(landCells * P.rockDensity), 4);
   scatter('sheep', randInt(rng, P.sheepMin, P.sheepMax), 1, base);
 
-  // Квадраты с деревьями и кустами — декоративные зоны, туда нельзя поставить отряд.
+  // Квадраты с деревьями, кустами и камнями — декоративные зоны, туда нельзя поставить отряд.
   const unavailable = new Set<number>();
   for (const o of decor) {
-    if (o.kind !== 'tree' && o.kind !== 'bush') continue;
+    if (o.kind !== 'tree' && o.kind !== 'bush' && o.kind !== 'rock') continue;
     const qi = squareOf[grid.idx(o.x, o.y)];
     if (qi >= 0) unavailable.add(qi);
   }
