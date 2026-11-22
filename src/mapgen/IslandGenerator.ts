@@ -159,8 +159,9 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     land = next;
   }
 
-  // берег — по парам столбцов, чтобы суша резалась на квадраты 2×2 без обрезков по краям
+  // берег — целыми квадратами 2×2, без зубцов по одной клетке
   snapColumns(land, W, H);
+  snapBlocks(land, W, H);
 
   // ---------- 3. один остров, без озёр ----------
   const landComps = floodComponents(W, H, (x, y) => land[y * W + x] === 1);
@@ -196,7 +197,8 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     if (!fill.length) break;
     for (const i of fill) land[i] = 1;
   }
-  const landCells = land.reduce((s, v) => s + v, 0);
+  snapBlocks(land, W, H);
+  let landCells = land.reduce((s, v) => s + v, 0);
   if (landCells < P.minLandCells) return reject('land-small');
   if (landCells > P.maxLandCells) return reject('land-big');
 
@@ -256,6 +258,8 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     if (!fill.length) break;
     for (const i of fill) level[i] = 1;
   }
+  snapBlocks(level, W, H);
+  landCells = level.reduce((s, v) => s + (v ? 1 : 0), 0);
 
   // ---------- 5. лестницы + связность ----------
   let grid!: IslandGrid;
@@ -335,7 +339,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     const fill: number[] = [];
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
       const i = grid.idx(x, y);
-      if (!grid.isWater(x, y)) continue;
+      if (!grid.isWater(x, y) || grid.isBlocked(x, y)) continue;
       let banks = 0;
       for (const [dx, dy] of DIRS4) {
         const nx = x + dx, ny = y + dy;
@@ -345,9 +349,18 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     }
     if (!fill.length) break;
     for (const i of fill) {
-      grid.level[i] = 1;
-      grid.blocked[i] = 1;
-      filler[i] = 1;
+      const x = i % W, y = Math.floor(i / W), qx = x - (x % 2);
+      for (const qy of [y, y - 1]) {
+        if (qy < 0 || qy + 1 >= H) continue;
+        const cells = [qy * W + qx, qy * W + qx + 1, (qy + 1) * W + qx, (qy + 1) * W + qx + 1];
+        if (cells.some((c) => grid.stairAt(c % W, Math.floor(c / W)) || stairEntry[c])) continue;
+        for (const c of cells) {
+          grid.level[c] = 1;
+          grid.blocked[c] = 1;
+          filler[c] = 1;
+        }
+        break;
+      }
     }
   }
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -770,6 +783,18 @@ function snapColumns(mask: Uint8Array, W: number, H: number): void {
       const v = near >= 3 ? 1 : 0;
       mask[y * W + x] = v;
       mask[y * W + x + 1] = v;
+    }
+  }
+}
+
+/** Выровнять маску целыми квадратами 2×2, сохранив максимальный уровень блока. */
+function snapBlocks(mask: Uint8Array, W: number, H: number): void {
+  for (let y = 0; y + 1 < H; y += 2) {
+    for (let x = 0; x + 1 < W; x += 2) {
+      const cells = [mask[y * W + x], mask[y * W + x + 1], mask[(y + 1) * W + x], mask[(y + 1) * W + x + 1]];
+      const n = cells.filter((v) => v > 0).length;
+      const v = n >= 2 ? Math.max(...cells) : 0;
+      for (const [cx, cy] of [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]] as const) mask[cy * W + cx] = v;
     }
   }
 }

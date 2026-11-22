@@ -1345,13 +1345,11 @@ export class BattleWorld {
     const pulse = 0.75 + 0.25 * Math.sin(this.scene.time.now / 180);
     const sel = this.selected && !this.selected.lost ? this.selected : null;
     const pv = sel ? this.preview : null;
-    if (sel) {
-      // сетка зон: в каждой помещается один отряд; занятые чужими — темнее
-      for (const z of this.zoneMap.zones) {
-        if (z === sel.zone || z === pv?.zone) continue;
-        const occ = this.zoneOccupiedBy(z);
-        m.mark(z, { fill: 0x000000, fillAlpha: occ ? 0.14 : 0, line: 0xffffff, lineAlpha: 0.22, lineWidth: 1 });
-      }
+    // игровая сетка зон видна всегда; при выбранном отряде становится заметнее
+    for (const z of this.zoneMap.zones) {
+      if (z === sel?.zone || z === pv?.zone) continue;
+      const occ = this.zoneOccupiedBy(z);
+      m.mark(z, { fill: 0x000000, fillAlpha: occ ? 0.14 : 0, line: 0xffffff, lineAlpha: sel ? 0.24 : 0.12, lineWidth: 1 });
     }
     const hov = this.hovered && this.hovered !== sel && !this.hovered.lost ? this.hovered : null;
     if (hov?.zone) m.mark(hov.zone, { fill: 0xffffff, fillAlpha: 0.08, line: 0xffffff, lineAlpha: 0.6, corners: true });
