@@ -531,10 +531,8 @@ export class BattleWorld {
     return o && !o.lost ? o : null;
   }
 
-  /** Зона для приказа: только обычный игровой квадрат; лестницы не принимают отряды. */
+  /** Зона для приказа: под точкой; у прямой лестницы — на противоположной стороне от отряда. */
   pickZone(x: number, y: number, from: Point, sq: Squad | null, allowSwap = false): Zone | null {
-    const cx = Math.floor(x / TILE), cy = Math.floor(y / TILE);
-    if (this.grid.stairAt(cx, cy)) return null;
     const start = this.cellIdx(from.x, from.y);
     const field = start >= 0 ? this.flow.field(start) : null;
     const pathDist = (z: Zone) => field ? field[z.cells[0]] : Infinity;
@@ -543,6 +541,8 @@ export class BattleWorld {
       if (o && o !== sq && !(swapping && sq?.zone)) return false;
       return start < 0 || Number.isFinite(pathDist(z));
     };
+    const stairZone = this.zoneAcrossStair(x, y, from, pathDist);
+    if (stairZone && ok(stairZone, allowSwap)) return stairZone;
     const under = this.zoneAt(x, y);
     if (under && ok(under, allowSwap)) return under;
     let best: Zone | null = null, bestD = Infinity;
@@ -551,6 +551,28 @@ export class BattleWorld {
       if (!Number.isFinite(route)) continue;
       const d = start >= 0 ? route * TILE + Math.hypot(z.cx - x, z.cy - y) * 0.2 : Math.hypot(z.cx - x, z.cy - y);
       if (d < bestD && ok(z)) { bestD = d; best = z; }
+    }
+    return best;
+  }
+
+  /** Клик по прямой лестнице: снизу отправляет в квадрат наверху, сверху — в квадрат внизу. */
+  private zoneAcrossStair(x: number, y: number, from: Point, pathDist: (z: Zone) => number): Zone | null {
+    const cx = Math.floor(x / TILE), cy = Math.floor(y / TILE);
+    const stair = this.grid.stairAt(cx, cy)?.def;
+    if (!stair || stair.side === 'left' || stair.side === 'right') return null;
+    const fromLevel = this.grid.walkRange(Math.floor(from.x / TILE), Math.floor(from.y / TILE))[1];
+    const wantLevel = fromLevel < stair.level ? stair.level : stair.level - 1;
+    const cells = IslandGrid.stairCellsOf(stair);
+    let best: Zone | null = null, bestD = Infinity;
+    for (const z of this.zoneMap.zones) {
+      if (z.level !== wantLevel) continue;
+      const connected = cells.some(([sx, sy]) => z.cells.some((c) => {
+        const tx = c % this.grid.w, ty = Math.floor(c / this.grid.w);
+        return this.grid.canStep(sx, sy, tx, ty);
+      }));
+      if (!connected) continue;
+      const d = pathDist(z) + Math.hypot(z.cx - x, z.cy - y) / TILE;
+      if (d < bestD) { bestD = d; best = z; }
     }
     return best;
   }

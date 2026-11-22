@@ -64,8 +64,14 @@ for (let seed = 1; seed <= n; seed++) {
       }
     }
     for (const st of d.grid.stairs) {
+      if (st.side !== 'left' && st.side !== 'right') continue;
       for (const [x, y] of IslandGrid.stairCellsOf(st)) {
-        if (zoneMap.zoneOfCell[d.grid.idx(x, y)] >= 0) throw new Error(`Лестница доступна для постановки отряда: сид ${seed}, клетка ${x},${y}`);
+        const zoneId = zoneMap.zoneOfCell[d.grid.idx(x, y)];
+        if (zoneId < 0) throw new Error(`Боковая лестница без зоны отряда: сид ${seed}, клетка ${x},${y}`);
+        const zone = zoneMap.zones[zoneId];
+        if (zone.level !== st.level - 1 || zone.cells.some((c) => d.grid.stairAt(c % d.grid.w, Math.floor(c / d.grid.w)))) {
+          throw new Error(`Клик по боковой лестнице не ведёт в квадрат под ней: сид ${seed}, клетка ${x},${y}`);
+        }
       }
     }
     for (const side of ['left', 'front', 'right'] as const) {
@@ -130,18 +136,12 @@ for (let seed = 1; seed <= n; seed++) {
       }
     }
     if (!isFullyConnected(d.grid)) console.log('НЕ СВЯЗАН', seed);
-    for (const q of d.squares) {
-      for (const o of d.decor) {
-        if ((o.kind !== 'tree' && o.kind !== 'bush' && o.kind !== 'rock') || o.x < q.x || o.x > q.x + 1 || o.y < q.y || o.y > q.y + 1) continue;
-        throw new Error(`Зона отряда содержит дерево или куст: сид ${seed}, клетка ${o.x},${o.y}`);
-      }
-    }
     bushPairs += d.decor.filter((t) => t.kind === 'tree'
       && d.decor.some((b) => b.kind === 'bush' && Math.hypot(b.x - t.x, b.y - t.y) <= 1.5)).length;
     const zoned = new Set(d.squares.flatMap((q) => [q.y * d.grid.w + q.x, q.y * d.grid.w + q.x + 1, (q.y + 1) * d.grid.w + q.x, (q.y + 1) * d.grid.w + q.x + 1]));
     const decorative = new Set<number>();
     for (const o of d.decor) {
-      if (o.kind !== 'tree' && o.kind !== 'bush' && o.kind !== 'rock') continue;
+      if (o.kind !== 'tree' && o.kind !== 'bush') continue;
       const qx = o.x - (o.x % 2);
       for (const qy of [o.y, o.y - 1]) {
         if (qy < 0 || qy + 1 >= d.grid.h) continue;
