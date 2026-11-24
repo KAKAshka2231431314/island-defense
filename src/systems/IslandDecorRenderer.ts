@@ -41,7 +41,7 @@ export class IslandDecorRenderer {
   private house(h: HouseSpot): void {
     const x = (h.x + h.width / 2) * TILE;
     const y = (h.y + 1) * TILE - 6;
-    const img = this.sort(this.scene.add.image(x, y, h.kind === 'barracks' ? 'barracks' : `house${h.variant}`).setOrigin(0.5, 1));
+    const img = this.sort(this.scene.add.image(x, y, h.kind === 'castle' ? 'castle' : h.kind === 'barracks' ? 'barracks' : `house${h.variant}`).setOrigin(0.5, 1));
     this.objects.push(img);
     this.houseSprites.set(h, img);
   }

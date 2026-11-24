@@ -63,6 +63,15 @@ for (let seed = 1; seed <= n; seed++) {
         throw new Error(`Маленький дом не занимает 2×2 клетки: сид ${seed}`);
       }
     }
+    const castles = d.houses.filter((h) => h.kind === 'castle');
+    if (castles.length !== 1) throw new Error(`На карте нет ровно одного замка: сид ${seed}`);
+    const castle = castles[0];
+    if (castle.y > d.grid.h * 0.45) throw new Error(`Замок не в верхней части острова: сид ${seed}`);
+    for (const l of d.landings) {
+      if (l.dy !== 1) throw new Error(`Высадка не с юга: сид ${seed}, клетка ${l.x},${l.y}`);
+      const route = walkDistances(d.grid, d.grid.idx(l.x, l.y));
+      if (route[d.grid.idx(castle.doorX, castle.doorY)] < 0) throw new Error(`Из высадки нет пути к замку: сид ${seed}`);
+    }
     for (const st of d.grid.stairs) {
       if (st.side !== 'left' && st.side !== 'right') continue;
       for (const [x, y] of IslandGrid.stairCellsOf(st)) {

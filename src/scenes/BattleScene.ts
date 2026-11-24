@@ -53,7 +53,7 @@ export interface BattleResult {
   /** отряды отступили с острова */
   retreated?: boolean;
   /** подробности для экрана итогов */
-  houses?: { value: number; saved: boolean; kind?: 'house' | 'barracks' }[];
+  houses?: { value: number; saved: boolean; kind?: 'house' | 'barracks' | 'castle' }[];
   squads?: { name: string; avatar: number; cls: SquadDef['cls']; hpFrac: number; lost: boolean }[];
 }
 
@@ -134,11 +134,14 @@ export class BattleScene extends Phaser.Scene {
     this.debug = new DebugOverlay(this, this.island);
 
     this.world = new BattleWorld(this, this.island, decor.houseSprites, this.weather);
+    const castle = this.world.houses.find((h) => h.spot.kind === 'castle') ?? null;
+    castle?.setKeyHouse();
     this.keyHouse = null;
     if (this.mission === 'keyHouse') {
-      const index = Math.floor(mulberry32(seed ^ 0x6a09e667)() * this.world.houses.length);
-      this.keyHouse = this.world.houses[index];
-      this.keyHouse.setKeyHouse();
+      const candidates = this.world.houses.filter((h) => h !== castle);
+      const index = Math.floor(mulberry32(seed ^ 0x6a09e667)() * candidates.length);
+      this.keyHouse = candidates[index] ?? null;
+      this.keyHouse?.setKeyHouse();
     }
     const squads = data.squads ?? DEFAULT_SQUADS;
     const spawns = this.squadSpawnPoints(squads.length);
@@ -324,14 +327,15 @@ export class BattleScene extends Phaser.Scene {
     }
     const allLost = this.world.squads.every((s) => s.lost);
     const missionLost = this.mission === 'keyHouse' && !!this.keyHouse && !this.keyHouse.alive;
-    const won = this.waves.finished && !allLost && !missionLost;
-    if (!won && !allLost && !missionLost) return;
+    const castleLost = !!this.world.houses.find((h) => h.spot.kind === 'castle' && !h.alive);
+    const won = this.waves.finished && !allLost && !missionLost && !castleLost;
+    if (!won && !allLost && !missionLost && !castleLost) return;
     this.ended = true;
     const result = this.makeResult(won);
     this.result = result;
     if (this.input0.autopilot) return; // прогон баланса: без заставок
     this.world.selected = null;
-    this.hud.onBattleEnd(won, missionLost);
+    this.hud.onBattleEnd(won, missionLost || castleLost);
     const cam = this.cameras.main;
     const go = () => {
       if (!this.scene.isActive()) return;

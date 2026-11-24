@@ -187,7 +187,9 @@ export const IMAGES: ImageDef[] = [
   { key: 'house2', path: `${FP}/Buildings/Blue Buildings/House2.png` },
   { key: 'house3', path: `${FP}/Buildings/Blue Buildings/House3.png` },
   { key: 'barracks', path: `${FP}/Buildings/Blue Buildings/Barracks.png` },
+  { key: 'castle', path: `${FP}/Buildings/Blue Buildings/Castle.png` },
   { key: 'house_destroyed', path: `${LG}/Factions/Knights/Buildings/House/House_Destroyed.png` },
+  { key: 'castle_destroyed', path: `${LG}/Factions/Knights/Buildings/Castle/Castle_Destroyed.png` },
 
   // Камни 64×64
   ...[1, 2, 3, 4].map((i) => ({ key: `rock${i}`, path: `${FP}/Terrain/Decorations/Rocks/Rock${i}.png` })),

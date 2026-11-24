@@ -64,15 +64,15 @@ export class ResultsScene extends Phaser.Scene {
       const total = label(this, coinIcon.x + 16 * k, cy, '0', 20 * k, COLOR.dark, false).setFontStyle('bold');
       let sum = 0;
       // казарма шире дома — занимает полтора места
-      const slots = houses.reduce((n, o) => n + (o.kind === 'barracks' ? 1.5 : 1), 0);
+      const slots = houses.reduce((n, o) => n + (o.kind === 'barracks' || o.kind === 'castle' ? 1.5 : 1), 0);
       const step = Math.min(HOUSE_ROW.step * k, (w - pad * 2) / slots);
       let at = x + pad;
       houses.forEach((hs, i) => {
-        const span = step * (hs.kind === 'barracks' ? 1.5 : 1);
+        const span = step * (hs.kind === 'barracks' || hs.kind === 'castle' ? 1.5 : 1);
         const hx = at + span / 2 + 12 * k, hy = cy + (HOUSE_ROW.h - 16) * k;
         at += span;
         const barracks = hs.kind === 'barracks';
-        const img = this.add.image(hx, hy, barracks ? 'barracks' : hs.saved ? 'house1' : 'house_destroyed').setOrigin(0.5, 1).setScale(HOUSE_ROW.scale * k).setAlpha(0);
+        const img = this.add.image(hx, hy, hs.kind === 'castle' ? (hs.saved ? 'castle' : 'castle_destroyed') : barracks ? 'barracks' : hs.saved ? 'house1' : 'house_destroyed').setOrigin(0.5, 1).setScale(HOUSE_ROW.scale * k).setAlpha(0);
         if (barracks && !hs.saved) img.setTint(0x4a3c36);
         this.time.delayedCall(COUNT.startMs + i * COUNT.stepMs, () => {
           img.setAlpha(hs.saved ? 1 : 0.6).setScale(HOUSE_ROW.popScale * k);

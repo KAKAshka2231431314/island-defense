@@ -2,6 +2,7 @@ import { CAMPAIGN } from '../src/data/balance';
 import { TILESET_BY_LEVEL } from '../src/data/config';
 import { generateIsland } from '../src/mapgen/IslandGenerator';
 import { IslandGrid } from '../src/mapgen/IslandGrid';
+import { walkDistances } from '../src/mapgen/connectivity';
 import { generateCampaignMap } from '../src/mapgen/campaignMap';
 import { ISLAND_POOLS } from '../src/mapgen/islandPools';
 
@@ -13,6 +14,14 @@ if (new Set(all).size !== 50) throw new Error('В пуле карт есть п�
 
 for (const seed of all) {
   const island = generateIsland(seed);
+  const castles = island.houses.filter((h) => h.kind === 'castle');
+  if (castles.length !== 1) throw new Error(`У карты пула нет ровно одного замка: сид ${seed}`);
+  const castle = castles[0];
+  for (const l of island.landings) {
+    if (l.dy !== 1) throw new Error(`У карты пула высадка не с юга: сид ${seed}`);
+    const route = walkDistances(island.grid, island.grid.idx(l.x, l.y));
+    if (route[island.grid.idx(castle.doorX, castle.doorY)] < 0) throw new Error(`У карты пула нет пути к замку: сид ${seed}`);
+  }
   for (const st of island.grid.stairs) {
     if (st.side !== 'left' && st.side !== 'right') continue;
     if (!TILESET_BY_LEVEL[st.level - 1]) throw new Error(`У боковой лестницы нет нижнего слоя: сид ${seed}`);

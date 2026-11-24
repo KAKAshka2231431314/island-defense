@@ -180,8 +180,8 @@ function pickTarget(u: Unit, w: BattleWorld, role: Role, housesLeft: boolean, ga
   if (gathering) return w.findTarget(u, u, Infinity, s.range + 16);
   u.retargetLeft = AI.retargetSec;
   if (role === 'heavy') {
-    // громила идёт к отрядам, а не к домам
-    return w.findTarget(u, u, Infinity, s.aggro) ?? w.nearestReachableFoe(u);
+    // громила бьёт только отряд рядом; иначе идёт к замку
+    return w.findTarget(u, u, Infinity, s.aggro);
   }
   if (role === 'shooter') {
     // уязвимые отряды (без щитов) в радиусе, иначе любой в радиусе, иначе ближайший уязвимый на острове
@@ -195,14 +195,19 @@ function pickTarget(u: Unit, w: BattleWorld, role: Role, housesLeft: boolean, ga
   return w.findTarget(u, u, Infinity, s.aggro) ?? (housesLeft ? null : w.nearestReachableFoe(u));
 }
 
-/** Ближайший по прямой дом, до двери которого есть маршрут. */
+/** Цель десанта: сначала замок; без него — ближайший дом, до двери которого есть маршрут. */
 function chooseHouse(u: Unit, w: BattleWorld, houses: House[]): House | null {
   const from = w.cellIdx(u.x, u.y);
   if (from < 0) return null;
+  const reachable = (h: House) => {
+    const to = w.cellIdx(h.door.x, h.door.y);
+    return to >= 0 && Number.isFinite(w.flow.distance(from, to));
+  };
+  const castle = houses.find((h) => h.spot.kind === 'castle' && reachable(h));
+  if (castle) return castle;
   let best: House | null = null, bestD = Infinity;
   for (const h of houses) {
-    const to = w.cellIdx(h.door.x, h.door.y);
-    if (to < 0 || !Number.isFinite(w.flow.distance(from, to))) continue;
+    if (!reachable(h)) continue;
     const d = u.dist(h.door);
     if (d < bestD) { bestD = d; best = h; }
   }

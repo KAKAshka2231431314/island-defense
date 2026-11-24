@@ -27,7 +27,7 @@ export interface HouseSpot {
   doorX: number;
   doorY: number;
   variant: number;
-  kind: 'house' | 'barracks';
+  kind: 'house' | 'barracks' | 'castle';
   /** ширина в клетках: 2 — дом, 4 — казарма */
   width: number;
 }
@@ -378,6 +378,7 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     for (let x = 0; x < W; x++) {
       if (squareOf[y * W + x] < 0 || grid.getLevel(x, y) !== 1 || stairEntry[y * W + x]) continue;
       for (const [dx, dy] of DIRS4) {
+        if (dy !== 1) continue; // tower defense: лодки приходят только с юга
         let clear = true;
         for (let k = 1; k <= P.landingClearance && clear; k++) clear = openWater(x + dx * k, y + dy * k);
         if (clear) landingCands.push({ x, y, dx, dy });
@@ -428,13 +429,33 @@ function tryGenerate(seed: number, attempt: number): IslandData | null {
     return false;
   };
 
+  // замок — цель tower defense: всегда в верхней части острова, ближе к центру
+  const castlePairs: { x: number; y: number; a: number; b: number }[] = [];
+  squares.forEach((q, a) => {
+    const b = squareAt(q.x + 2, q.y);
+    if (b < 0 || squares[b].y !== q.y || squares[b].x !== q.x + 2 || squares[b].level !== q.level) return;
+    if (!buildable(a) || !buildable(b) || below(a) < 0 || below(b) < 0 || !barracksClear(a)) return;
+    castlePairs.push({ x: q.x + 2, y: q.y + 1, a, b });
+  });
+  castlePairs.sort((p, q) => p.y - q.y || Math.abs(p.x - W / 2) - Math.abs(q.x - W / 2));
+  for (const p of castlePairs) {
+    if (!occupy([...squareCells(squares[p.a], W), ...squareCells(squares[p.b], W)])) continue;
+    usedSquares.add(p.a).add(p.b);
+    doorSquares.add(below(p.a)).add(below(p.b));
+    const q = squares[p.a];
+    houses.push({ x: q.x, y: q.y + 1, doorX: q.x + 1, doorY: q.y + 2, variant: 0, kind: 'castle', width: 4 });
+    break;
+  }
+  if (!houses.some((h) => h.kind === 'castle')) return reject('castle');
+
   // казарма рыцарей: два квадрата рядом на одном уровне, под обоими — свободные квадраты (вход посередине)
   if (rng() < P.barracksChance) {
     const pairs: { x: number; y: number; a: number; b: number }[] = [];
     squares.forEach((q, a) => {
       const b = squareAt(q.x + 2, q.y);
       if (b < 0 || squares[b].y !== q.y || squares[b].x !== q.x + 2 || squares[b].level !== q.level) return;
-      if (!buildable(a) || !buildable(b) || below(a) < 0 || below(b) < 0 || !barracksClear(a)) return;
+      if (usedSquares.has(a) || usedSquares.has(b) || doorSquares.has(a) || doorSquares.has(b)
+        || !buildable(a) || !buildable(b) || below(a) < 0 || below(b) < 0 || !barracksClear(a)) return;
       pairs.push({ x: q.x + 2, y: q.y + 1, a, b });
     });
     for (const p of shuffle(rng, pairs)) {

@@ -40,6 +40,7 @@ export class House {
 
   get value(): number {
     if (this.spot.kind === 'barracks') return HOUSE.barracksCoins;
+    if (this.spot.kind === 'castle') return 0;
     return HOUSE.coinsByVariant[this.spot.variant] ?? 3;
   }
 
@@ -77,8 +78,8 @@ export class House {
 
   setOnFire(): void {
     this.state = 'burning';
-    this.burnLeft = HOUSE.burnTime;
-    const wide = this.spot.kind === 'barracks';
+    this.burnLeft = this.spot.kind === 'castle' ? HOUSE.castleBurnTime : HOUSE.burnTime;
+    const wide = this.spot.kind === 'barracks' || this.spot.kind === 'castle';
     const spots = wide
       ? [[-60, -60], [40, -90], [-10, -130], [64, -40], [-40, -20], [20, -30], [70, -110]]
       : [[-30, -50], [22, -70], [-4, -100], [30, -30], [-26, -20]];
@@ -103,7 +104,8 @@ export class House {
     if (this.burnLeft <= 0) {
       this.state = 'destroyed';
       // сгоревшей казармы в паке нет — тёмный остов
-      if (this.spot.kind === 'barracks') this.sprite.setTint(BURNT_TINT);
+      if (this.spot.kind === 'castle') this.sprite.setTexture('castle_destroyed');
+      else if (this.spot.kind === 'barracks') this.sprite.setTint(BURNT_TINT);
       else this.sprite.setTexture('house_destroyed');
       // от пожара остаётся пара угольков
       this.fires.forEach((f, i) => {
